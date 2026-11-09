@@ -1,0 +1,9 @@
+.env
+.git
+.gitignore
+__pycache__/
+*.py[cod]
+.venv/
+tests/
+README.md
+GUIDE_FA.md
