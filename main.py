@@ -195,9 +195,26 @@ async def forward_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 # Application Factory
 # --------------------------------------------------------------------------- #
 
+async def post_init(application: Application) -> None:
+    """Validate the token and log startup details after PTB initializes."""
+    cfg: Config = application.bot_data["config"]
+    me = await application.bot.get_me()
+    logger.info("=" * 60)
+    logger.info("Bot started successfully: @%s (id=%s)", me.username, me.id)
+    logger.info(
+        "Source chats (%d configured): %s",
+        len(cfg.source_chat_ids) + len(cfg.source_chat_usernames),
+        ", ".join([str(i) for i in cfg.source_chat_ids] + [f"@{u}" for u in cfg.source_chat_usernames]),
+    )
+    logger.info("Target chat: %s", cfg.target_chat_id)
+    logger.info("Silent forwarding: %s", cfg.forward_silent)
+    logger.info("Listening for messages... (Ctrl+C to stop)")
+    logger.info("=" * 60)
+
+
 def build_application(cfg: Config) -> Application:
     """Build and wire the PTB Application."""
-    app = ApplicationBuilder().token(cfg.bot_token).build()
+    app = ApplicationBuilder().token(cfg.bot_token).post_init(post_init).build()
     app.bot_data["config"] = cfg
 
     # Commands (registered first so they are not treated as regular messages)
@@ -223,38 +240,18 @@ def build_application(cfg: Config) -> Application:
     return app
 
 
-async def _run() -> None:
+def main() -> None:
     cfg = load_config()
     logging.getLogger().setLevel(getattr(logging, cfg.log_level, logging.INFO))
 
     app = build_application(cfg)
-
-    # Validate bot token and print identity
-    async with app:
-        me = await app.bot.get_me()
-        logger.info("=" * 60)
-        logger.info("Bot started successfully: @%s (id=%s)", me.username, me.id)
-        logger.info(
-            "Source chats (%d configured): %s",
-            len(cfg.source_chat_ids) + len(cfg.source_chat_usernames),
-            ", ".join([str(i) for i in cfg.source_chat_ids] + [f"@{u}" for u in cfg.source_chat_usernames]),
-        )
-        logger.info("Target chat: %s", cfg.target_chat_id)
-        logger.info("Silent forwarding: %s", cfg.forward_silent)
-        logger.info("Listening for messages... (Ctrl+C to stop)")
-        logger.info("=" * 60)
-
-    # run_polling runs forever until SIGINT/SIGTERM
-    app.run_polling(
-        allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=True,
-        close_loop=False,
-    )
-
-
-def main() -> None:
     try:
-        asyncio.run(_run())
+        # run_polling owns the event loop. Do not wrap it in asyncio.run().
+        app.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True,
+            close_loop=False,
+        )
     except (KeyboardInterrupt, SystemExit):
         logger.info("Bot stopped.")
 
